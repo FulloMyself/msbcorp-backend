@@ -8,6 +8,10 @@ const auth = require('../middleware/authMiddleware');
 const admin = require('../middleware/adminMiddleware');
 const router = express.Router();
 
+const BUCKET = process.env.AWS_BUCKET_NAME;
+const REGION = process.env.AWS_REGION;
+
+
 // Get all users
 router.get('/users', auth, admin, async (req,res)=>{
   const users = await User.find({ role:'user' }).select('-password');
