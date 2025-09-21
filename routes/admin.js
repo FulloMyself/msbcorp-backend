@@ -1,6 +1,5 @@
 const express = require('express');
-const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const Loan = require('../models/Loan');
 const Document = require('../models/Document');
 const User = require('../models/User');
