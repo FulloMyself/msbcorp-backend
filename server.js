@@ -8,11 +8,30 @@ const userRoutes = require('./routes/user');
 const adminRoutes = require('./routes/admin');
 
 const app = express();
+const allowedOrigins = [
+  "http://localhost:5500",
+  "http://127.0.0.1:5500",
+  "http://localhost:3000",
+  "https://fullomyself.github.io"
+];
+
 const corsOptions = {
-  origin: ['http://localhost:5500', 'http://127.0.0.1:5500', 'http://localhost:3000', 'https://fullomyself.github.io'],
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
 };
+
 app.use(cors(corsOptions));
+
+// Explicitly handle preflight requests
+app.options("*", cors(corsOptions));
 
 app.use(express.json());
 app.use('/uploads', express.static('uploads')); // serve uploaded files
