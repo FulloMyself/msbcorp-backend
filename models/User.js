@@ -1,23 +1,44 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const validator = require('validator');
 
-const userSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  role: { type: String, enum: ['user','admin'], default: 'user' }
-});
-
-// Hash password
-userSchema.pre('save', async function(next){
-  if(!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
-
-userSchema.methods.comparePassword = function(password){
-  return bcrypt.compare(password, this.password);
-}
+const userSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, 'Name is required'],
+      trim: true,
+      minlength: 2,
+      maxlength: 50,
+    },
+    email: {
+      type: String,
+      required: [true, 'Email is required'],
+      unique: true,
+      lowercase: true,
+      validate: [validator.isEmail, 'Invalid email address'],
+    },
+    contact: {
+      type: String,
+      required: [true, 'Contact number is required'],
+      validate: {
+        validator: function (v) {
+          return /^\+?\d{7,15}$/.test(v); // allows +countrycode and 7-15 digits
+        },
+        message: props => `${props.value} is not a valid contact number!`,
+      },
+    },
+    password: {
+      type: String,
+      required: [true, 'Password is required'],
+      minlength: [6, 'Password must be at least 6 characters'],
+    },
+    role: {
+      type: String,
+      enum: ['user', 'admin'],
+      default: 'user',
+    },
+  },
+  { timestamps: true }
+);
 
 module.exports = mongoose.model('User', userSchema);
