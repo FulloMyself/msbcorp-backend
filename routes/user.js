@@ -117,7 +117,7 @@ router.delete('/documents/:id', auth, async (req, res) => {
     if (doc.user.toString() !== req.user._id.toString())
       return res.status(403).json({ message: 'Unauthorized' });
 
-    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: fileName }));
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: doc.fileName }));
     await doc.remove();
 
     res.json({ message: 'Document deleted successfully' });
