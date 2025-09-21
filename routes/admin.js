@@ -88,6 +88,33 @@ router.get('/documents/:id', auth, async (req, res) => {
   }
 });
 
+// Admin: delete document
+router.delete('/documents/:id', auth, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+
+    // delete from S3
+    const command = new DeleteObjectCommand({
+      Bucket: BUCKET,
+      Key: doc.fileName,
+    });
+    await s3.send(command);
+
+    // delete from Mongo
+    await Document.deleteOne({ _id: doc._id });
+
+    res.json({ message: "Document deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error deleting document" });
+  }
+});
+
 
 // Approve/reject loan
 router.patch('/loans/:id', auth, admin, async (req,res)=>{
