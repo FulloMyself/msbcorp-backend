@@ -1,8 +1,8 @@
-const express = require('express');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { Upload } = require('@aws-sdk/lib-storage');
 const multer = require('multer');
-const multerS3 = require('multer-s3');
-const AWS = require('aws-sdk');
-const { v4: uuidv4 } = require('uuid');
+const multerS3 = require('multer-s3'); // optional if you want direct streaming
+require('dotenv').config();
 
 const Loan = require('../models/Loan');
 const Document = require('../models/Document');
@@ -10,11 +10,13 @@ const auth = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-// AWS S3 configuration
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION
+// AWS S3 client
+const s3 = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
 });
 
 // Multer S3 storage
@@ -50,27 +52,35 @@ router.post('/apply-loan', auth, async (req, res) => {
 // -----------------
 // Upload document
 // -----------------
-router.post('/upload-document', auth, upload.single('document'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+router.post('/upload-document', auth, multer().single('document'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
+  const params = {
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: `${Date.now()}-${req.file.originalname}`,
+    Body: req.file.buffer,
+    ContentType: req.file.mimetype
+  };
+
+  try {
+    const upload = new Upload({
+      client: s3,
+      params
+    });
+
+    const result = await upload.done();
+
+    // Save to DB
     const doc = await Document.create({
       user: req.user._id,
-      fileName: req.file.key,
-      status: 'Pending'
+      fileName: params.Key,
+      url: `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${params.Key}`
     });
 
-    // Generate signed URL for access
-    const signedUrl = s3.getSignedUrl('getObject', {
-      Bucket: process.env.AWS_BUCKET_NAME,
-      Key: req.file.key,
-      Expires: 60 * 60 // 1 hour
-    });
-
-    res.json({ ...doc.toObject(), url: signedUrl });
+    res.json(doc);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Server error uploading document' });
+    res.status(500).json({ message: 'S3 upload failed' });
   }
 });
 
