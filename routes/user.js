@@ -1,5 +1,6 @@
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
+const express = require('express');
 const multer = require('multer');
 const multerS3 = require('multer-s3'); // optional if you want direct streaming
 require('dotenv').config();
