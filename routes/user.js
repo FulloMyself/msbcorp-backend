@@ -101,24 +101,28 @@ router.get('/loans', auth, async (req, res) => {
 // -----------------
 // Get user's documents
 // -----------------
-router.get('/documents', auth, async (req, res) => {
+router.get('/documents', auth, async (req,res)=>{
   try {
-    const docs = await Document.find({ user: req.user._id });
+    const docs = await Document.find({ user:req.user._id });
 
-    // Map each document to include signed URL
-    const docsWithUrls = docs.map(d => {
-      const url = s3.getSignedUrl('getObject', {
+    const signedDocs = await Promise.all(docs.map(async d => {
+      const command = new PutObjectCommand({
         Bucket: process.env.AWS_BUCKET_NAME,
-        Key: d.fileName,
-        Expires: 60 * 60
+        Key: d.fileName
       });
-      return { ...d.toObject(), url };
-    });
 
-    res.json(docsWithUrls);
-  } catch (err) {
+      const url = await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour
+
+      return {
+        ...d.toObject(),
+        signedUrl: url
+      };
+    }));
+
+    res.json(signedDocs);
+  } catch(err) {
     console.error(err);
-    res.status(500).json({ message: 'Failed to fetch documents' });
+    res.status(500).json({ message: 'Failed to load documents' });
   }
 });
 
