@@ -2,45 +2,57 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path');
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const adminRoutes = require('./routes/admin');
 
 const app = express();
+
+// ===== CORS setup =====
 const allowedOrigins = [
-  "http://localhost:5500",
-  "http://127.0.0.1:5500",
-  "http://localhost:3000",
-  "https://fullomyself.github.io"
+  "http://localhost:5500",           // local dev via Live Server
+  "http://127.0.0.1:5500",           // local dev
+  "http://localhost:3000",           // React dev server (optional)
+  "https://fullomyself.github.io"    // production frontend
 ];
 
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, Postman)
-    if (!origin) return callback(null, true);
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true); // allow non-browser requests (e.g., Postman)
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      callback(new Error("CORS not allowed for this origin"));
     }
   },
   credentials: true,
 };
 
+// Apply CORS globally (handles preflight automatically)
 app.use(cors(corsOptions));
 
-// Explicitly handle preflight requests
-app.options("*", cors(corsOptions));
-
+// ===== Middleware =====
 app.use(express.json());
-app.use('/uploads', express.static('uploads')); // serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // serve uploaded files
 
-// Routes
+// ===== API Routes =====
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 
+// ===== Serve frontend for any unmatched route =====
+// Serve frontend static files first
+app.use(express.static(path.join(__dirname, 'frontend')));
+
+// Catch-all route (Express 5 compatible)
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
+});
+
+
+// ===== Connect to MongoDB and start server =====
 const PORT = process.env.PORT || 5000;
 
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -48,4 +60,4 @@ mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopol
     console.log('MongoDB connected');
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
-  .catch(err => console.error(err));
+  .catch(err => console.error('MongoDB connection error:', err));
