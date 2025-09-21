@@ -11,6 +11,14 @@ const router = express.Router();
 const BUCKET = process.env.AWS_BUCKET_NAME;
 const REGION = process.env.AWS_REGION;
 
+const s3 = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
+});
+
 
 // Get all users
 router.get('/users', auth, admin, async (req,res)=>{
