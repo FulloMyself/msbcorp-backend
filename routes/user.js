@@ -1,4 +1,4 @@
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand} = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { Upload } = require('@aws-sdk/lib-storage');
 const express = require('express');
@@ -83,6 +83,44 @@ router.post('/upload-document', auth, multer().single('document'), async (req, r
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'S3 upload failed' });
+  }
+});
+
+// Generate download link
+router.get('/documents/:id/download', auth, async (req, res) => {
+  try {
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Document not found' });
+
+    if (doc.user.toString() !== req.user._id.toString()) 
+      return res.status(403).json({ message: 'Unauthorized' });
+
+    const command = new GetObjectCommand({ Bucket: BUCKET, Key: doc.fileName });
+    const url = await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour
+
+    res.json({ url, fileName: doc.fileName });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to generate download link' });
+  }
+});
+
+// Delete file
+router.delete('/documents/:id', auth, async (req, res) => {
+  try {
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Document not found' });
+
+    if (doc.user.toString() !== req.user._id.toString())
+      return res.status(403).json({ message: 'Unauthorized' });
+
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: doc.fileName }));
+    await doc.remove();
+
+    res.json({ message: 'Document deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to delete document' });
   }
 });
 
