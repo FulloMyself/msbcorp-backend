@@ -39,7 +39,9 @@ router.get('/documents', auth, async (req, res) => {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    const docs = await Document.find().populate("user", "email");
+    // ✅ Populate both name and email so Admin can see them
+    const docs = await Document.find().populate("user", "name email");
+
     const results = await Promise.all(
       docs.map(async (doc) => {
         const command = new GetObjectCommand({
@@ -52,16 +54,22 @@ router.get('/documents', auth, async (req, res) => {
         return {
           ...doc.toObject(),
           url,
+          user: {
+            _id: doc.user?._id,
+            name: doc.user?.name || "No Name",
+            email: doc.user?.email || "No Email",
+          },
         };
       })
     );
 
     res.json(results);
   } catch (err) {
-    console.error(err);
+    console.error("Admin documents error:", err);
     res.status(500).json({ error: "Error fetching documents" });
   }
 });
+
 
 // ✅ Admin: View a specific document
 router.get('/documents/:id', auth, async (req, res) => {
