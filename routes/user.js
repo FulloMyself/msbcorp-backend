@@ -1,10 +1,13 @@
-const { S3Client, PutObjectCommand, DeleteObjectCommand} = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { Upload } = require('@aws-sdk/lib-storage');
 const express = require('express');
 const multer = require('multer');
 const multerS3 = require('multer-s3'); // optional if you want direct streaming
 require('dotenv').config();
+
+const BUCKET = process.env.AWS_BUCKET_NAME;
+const REGION = process.env.AWS_REGION;
 
 const Loan = require('../models/Loan');
 const Document = require('../models/Document');
@@ -114,7 +117,7 @@ router.delete('/documents/:id', auth, async (req, res) => {
     if (doc.user.toString() !== req.user._id.toString())
       return res.status(403).json({ message: 'Unauthorized' });
 
-    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: doc.fileName }));
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: fileName }));
     await doc.remove();
 
     res.json({ message: 'Document deleted successfully' });
