@@ -4,17 +4,20 @@ import nodemailer from "nodemailer";
 export const sendEmail = async (to, subject, text) => {
   try {
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com", // or your domain’s SMTP server
-      port: 465,
-      secure: true, // true for port 465, false for 587
+      host: process.env.SMTP_HOST,        // e.g., mail.msbfinance.co.za
+      port: Number(process.env.SMTP_PORT), // 465 for SSL, 587 for TLS
+      secure: Number(process.env.SMTP_PORT) === 465, // true for SSL (465), false for TLS (587)
       auth: {
-        user: process.env.EMAIL_USER, // e.g. info@msbfinance.co.za
-        pass: process.env.EMAIL_PASS, // your email password / app password
+        user: process.env.SMTP_USER,      // full Afrihost email, e.g., info@msbfinance.co.za
+        pass: process.env.SMTP_PASS       // email password from cPanel
       },
+      tls: {
+        rejectUnauthorized: false // helps avoid SSL cert issues
+      }
     });
 
     await transporter.sendMail({
-      from: `"MSB Finance" <${process.env.EMAIL_USER}>`,
+      from: `"MSB Finance" <${process.env.SMTP_USER}>`,
       to,
       subject,
       text,
