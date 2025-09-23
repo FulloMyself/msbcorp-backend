@@ -91,7 +91,7 @@ Thank you,
 MSB Finance
     `;
 
-    await sendEmail("info@msbfinance.co.za", "New Loan Application", adminMessage);
+    await sendEmail(process.env.SMTP_USER, "New Loan Application", adminMessage);
     await sendEmail(req.user.email, "Loan Application Received", userMessage);
 
     // 3️⃣ Return the created loan
