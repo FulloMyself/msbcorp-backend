@@ -3,6 +3,7 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { Upload } = require('@aws-sdk/lib-storage');
 const express = require('express');
 const multer = require('multer');
+import { sendEmail } from "../utils/mailer.js";
 const multerS3 = require('multer-s3'); // optional if you want direct streaming
 require('dotenv').config();
 
@@ -168,5 +169,47 @@ router.get('/documents', auth, async (req,res)=>{
     res.status(500).json({ message: 'Failed to load documents' });
   }
 });
+
+// POST /user/send-loan-notifications
+router.post("/send-loan-notifications", authMiddleware, async (req, res) => {
+  try {
+    const { amount, bankDetails } = req.body;
+    const user = req.user; // from JWT
+
+    const adminMessage = `
+A new loan application has been submitted.
+
+Applicant: ${user.name} (${user.email})
+Loan Amount: R${amount}
+
+Bank Details:
+- Bank Name: ${bankDetails.bankName}
+- Account Number: ${bankDetails.accountNumber}
+- Branch Code: ${bankDetails.branchCode}
+- Account Holder: ${bankDetails.accountHolder}
+    `;
+
+    const userMessage = `
+Dear ${user.name},
+
+Your loan application for R${amount} has been received and is pending verification.
+Our team will review it and get back to you shortly.
+
+Thank you,
+MSB Finance
+    `;
+
+    // Send emails
+    await sendEmail("info@msbfinance.co.za", "New Loan Application", adminMessage);
+    await sendEmail(user.email, "Loan Application Received", userMessage);
+
+    res.json({ success: true, message: "Notifications sent" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Failed to send notifications" });
+  }
+});
+
+
 
 module.exports = router;
