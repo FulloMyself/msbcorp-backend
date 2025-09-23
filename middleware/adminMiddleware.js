@@ -1,6 +1,8 @@
 const adminMiddleware = (req, res, next) => {
-  if(req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ message: "Admin only" });
+  }
   next();
-}
+};
 
-module.exports = adminMiddleware;
+export default adminMiddleware;

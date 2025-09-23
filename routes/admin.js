@@ -1,56 +1,47 @@
-const express = require('express');
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const Loan = require('../models/Loan');
-const Document = require('../models/Document');
-const User = require('../models/User');
-const auth = require('../middleware/authMiddleware');
-const admin = require('../middleware/adminMiddleware');
+import express from "express";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+import Loan from "../models/Loan.js";
+import Document from "../models/Document.js";
+import User from "../models/User.js";
+
+import authMiddleware from "../middleware/authMiddleware.js";
+import adminMiddleware from "../middleware/adminMiddleware.js";
+
 const router = express.Router();
 
 const BUCKET = process.env.AWS_BUCKET_NAME;
 const REGION = process.env.AWS_REGION;
 
 const s3 = new S3Client({
-  region: process.env.AWS_REGION,
+  region: REGION,
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
 });
 
-
 // Get all users
-router.get('/users', auth, admin, async (req,res)=>{
-  const users = await User.find({ role:'user' }).select('-password');
+router.get("/users", authMiddleware, adminMiddleware, async (req, res) => {
+  const users = await User.find({ role: "user" }).select("-password");
   res.json(users);
 });
 
 // Get all loans
-router.get('/loans', auth, admin, async (req,res)=>{
-  const loans = await Loan.find().populate('user','name email');
+router.get("/loans", authMiddleware, adminMiddleware, async (req, res) => {
+  const loans = await Loan.find().populate("user", "name email");
   res.json(loans);
 });
 
 // Get all documents
-// Admin: list all documents with signed URLs
-router.get('/documents', auth, async (req, res) => {
+router.get("/documents", authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ error: "Access denied" });
-    }
-
-    // ✅ Populate both name and email so Admin can see them
     const docs = await Document.find().populate("user", "name email");
-
     const results = await Promise.all(
       docs.map(async (doc) => {
-        const command = new GetObjectCommand({
-          Bucket: BUCKET,
-          Key: doc.fileName,
-        });
-
+        const command = new GetObjectCommand({ Bucket: BUCKET, Key: doc.fileName });
         const url = await getSignedUrl(s3, command, { expiresIn: 60 * 5 });
-
         return {
           ...doc.toObject(),
           url,
@@ -62,7 +53,6 @@ router.get('/documents', auth, async (req, res) => {
         };
       })
     );
-
     res.json(results);
   } catch (err) {
     console.error("Admin documents error:", err);
@@ -70,49 +60,29 @@ router.get('/documents', auth, async (req, res) => {
   }
 });
 
-
-// ✅ Admin: View a specific document
-router.get('/documents/:id', auth, async (req, res) => {
+// View a specific document
+router.get("/documents/:id", authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const doc = await Document.findById(req.params.id);
-    if (!doc) return res.status(404).json({ error: 'Document not found' });
-
-    // Create a signed URL for the file
-    const command = new GetObjectCommand({
-      Bucket: BUCKET,
-      Key: doc.fileName,
-    });
-
-    const url = await getSignedUrl(s3, command, { expiresIn: 60 * 5 }); // 5 mins
-    res.json({ url, fileName: doc.fileName, user: doc.user });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error fetching document' });
-  }
-});
-
-// Admin: delete document
-router.delete('/documents/:id', auth, async (req, res) => {
-  try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ error: "Access denied" });
-    }
-
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: "Document not found" });
 
-    // delete from S3
-    const command = new DeleteObjectCommand({
-      Bucket: BUCKET,
-      Key: doc.fileName,
-    });
-    await s3.send(command);
+    const command = new GetObjectCommand({ Bucket: BUCKET, Key: doc.fileName });
+    const url = await getSignedUrl(s3, command, { expiresIn: 60 * 5 });
 
-    // delete from Mongo
+    res.json({ url, fileName: doc.fileName, user: doc.user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error fetching document" });
+  }
+});
+
+// Delete a document
+router.delete("/documents/:id", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: "Document not found" });
+
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: doc.fileName }));
     await Document.deleteOne({ _id: doc._id });
 
     res.json({ message: "Document deleted successfully" });
@@ -122,21 +92,24 @@ router.delete('/documents/:id', auth, async (req, res) => {
   }
 });
 
-
 // Approve/reject loan
-router.patch('/loans/:id', auth, admin, async (req,res)=>{
+router.patch("/loans/:id", authMiddleware, adminMiddleware, async (req, res) => {
   const { status } = req.body;
-  if(!['Pending','Approved','Rejected'].includes(status)) return res.status(400).json({ message:'Invalid status' });
-  const loan = await Loan.findByIdAndUpdate(req.params.id,{ status },{ new:true });
+  if (!["Pending", "Approved", "Rejected"].includes(status))
+    return res.status(400).json({ message: "Invalid status" });
+
+  const loan = await Loan.findByIdAndUpdate(req.params.id, { status }, { new: true });
   res.json(loan);
 });
 
 // Approve/reject document
-router.patch('/documents/:id', auth, admin, async (req,res)=>{
+router.patch("/documents/:id", authMiddleware, adminMiddleware, async (req, res) => {
   const { status } = req.body;
-  if(!['Pending','Approved','Rejected'].includes(status)) return res.status(400).json({ message:'Invalid status' });
-  const doc = await Document.findByIdAndUpdate(req.params.id,{ status },{ new:true });
+  if (!["Pending", "Approved", "Rejected"].includes(status))
+    return res.status(400).json({ message: "Invalid status" });
+
+  const doc = await Document.findByIdAndUpdate(req.params.id, { status }, { new: true });
   res.json(doc);
 });
 
-module.exports = router;
+export default router;
