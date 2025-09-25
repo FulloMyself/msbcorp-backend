@@ -42,9 +42,39 @@ const upload = multer({
   })
 });
 
-// -----------------
-// Loan application (with bank details)
-// -----------------
+// Update user details (Phone + Password)
+router.put("/update-details", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id; // set by authMiddleware
+    const { contact, currentPassword, newPassword } = req.body;
+
+    const user = await User.findById(userId);
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Update contact if provided
+    if (contact) user.contact = contact;
+
+    // Update password if provided
+    if (newPassword) {
+      if (!currentPassword)
+        return res.status(400).json({ message: "Current password required" });
+
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch)
+        return res.status(400).json({ message: "Current password incorrect" });
+
+      user.password = await bcrypt.hash(newPassword, 10);
+    }
+
+    await user.save();
+    return res.json({ message: "Details updated successfully" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
 // -----------------
 // Apply loan & send notifications
 // -----------------
@@ -102,7 +132,6 @@ MSB Finance
     res.status(500).json({ success: false, message: "Failed to apply loan" });
   }
 });
-
 
 // -----------------
 // Upload document
