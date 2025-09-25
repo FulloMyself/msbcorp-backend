@@ -4,7 +4,12 @@ import mongoose from "mongoose";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import bcrypt from "bcryptjs";
 
+// ===== Import Models =====
+import User from "./models/User.js";
+
+// ===== Import Routes =====
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/user.js";
 import adminRoutes from "./routes/admin.js";
@@ -59,15 +64,48 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: err.message || "Internal server error" });
 });
 
-// ===== Connect to MongoDB and start server =====
+// ===== Admin Seeder =====
+const ensureAdminExists = async () => {
+  try {
+    const email = "info@msbfinance.co.za";
+    const existingAdmin = await User.findOne({ email });
+
+    if (!existingAdmin) {
+      const password = "Admin@123"; // ⚠️ Replace or move to .env
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const admin = new User({
+        name: "MSB Finance Admin",
+        email,
+        contact: "+27711227059", // ✅ Update with real number
+        password: hashedPassword,
+        role: "admin",
+      });
+
+      await admin.save();
+      console.log("✅ Admin account created:", email);
+      console.log("🔑 Temporary password:", password);
+    } else {
+      console.log("ℹ️ Admin already exists:", email);
+    }
+  } catch (err) {
+    console.error("❌ Error ensuring admin exists:", err.message);
+  }
+};
+
+// ===== Connect to MongoDB and Start Server =====
 const PORT = process.env.PORT || 5000;
 
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
-  .then(() => {
-    console.log("MongoDB connected");
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  .then(async () => {
+    console.log("✅ MongoDB connected");
+
+    // Ensure the collections exist and seed admin
+    await ensureAdminExists();
+
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
-  .catch(err => console.error("MongoDB connection error:", err));
+  .catch(err => console.error("❌ MongoDB connection error:", err));
