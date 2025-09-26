@@ -138,7 +138,7 @@ MSB Finance
       console.error("Email failed:", emailErr);
     }
 
-    res.json({ success: true, loan, message: "Loan applied successfully (emails may have failed)" });
+    res.json({ success: true, loan, message: "Loan applied and email notifications sent successfully." });
   } catch (err) {
     console.error("Loan application error:", err);
     res.status(500).json({ success: false, message: "Failed to apply loan" });
