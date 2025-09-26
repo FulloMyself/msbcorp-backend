@@ -22,7 +22,7 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ===== CORS setup =====
+// ===== CORS setup ====
 const allowedOrigins = [
   "http://localhost:5500",
   "http://127.0.0.1:5500",

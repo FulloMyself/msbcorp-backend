@@ -1,71 +1,66 @@
+// userRoutes.js
 import express from "express";
-import multer from "multer";
-import multerS3 from "multer-s3";
 import dotenv from "dotenv";
-
+import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import multer from "multer";
+import { S3Client, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-import { sendEmail } from "../utils/mailer.js";
+import User from "../models/User.js";
 import Loan from "../models/Loan.js";
 import Document from "../models/Document.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import { sendEmail } from "../utils/mailer.js";
 
 dotenv.config();
 
+// -----------------
+// AWS S3 Config
+// -----------------
 const BUCKET = process.env.AWS_BUCKET_NAME;
 const REGION = process.env.AWS_REGION;
-
-const router = express.Router();
-
-// AWS S3 client
 const s3 = new S3Client({
   region: REGION,
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-  }
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
 });
 
-// Multer S3 storage
-const upload = multer({
-  storage: multerS3({
-    s3,
-    bucket: BUCKET,
-    acl: "private",
-    key: (req, file, cb) => {
-      const uniqueName = `${Date.now()}-${uuidv4()}-${file.originalname}`;
-      cb(null, uniqueName);
-    }
-  })
-});
+// -----------------
+// Multer setup
+// -----------------
+const upload = multer();
 
+const router = express.Router();
+
+// -----------------
+// Get current user
+// -----------------
 router.get("/me", authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select("-password");
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.json(user);
+    res.json(req.user);
   } catch (err) {
+    console.error("Error fetching user:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
+// -----------------
 // Update user details (Phone + Password)
-router.put("/update-details", authMiddleware, async (req, res) => {
+// -----------------
+router.post("/update-details", authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id; // set by authMiddleware
+    const userId = req.user.id;
     const { contact, currentPassword, newPassword } = req.body;
 
     const user = await User.findById(userId);
-
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Update contact if provided
     if (contact) user.contact = contact;
 
-    // Update password if provided
     if (newPassword) {
       if (!currentPassword)
         return res.status(400).json({ message: "Current password required" });
@@ -78,36 +73,41 @@ router.put("/update-details", authMiddleware, async (req, res) => {
     }
 
     await user.save();
-    return res.json({ message: "Details updated successfully" });
+    res.json({ message: "Details updated successfully" });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Server error" });
+    console.error("Error updating details:", err);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
 // -----------------
-// Apply loan & send notifications
+// Apply loan
 // -----------------
 router.post("/apply-loan", authMiddleware, async (req, res) => {
-  const { amount, bankDetails } = req.body;
+  const { amount, bankDetails, term } = req.body;
 
+  // Validate input
   if (!amount || amount < 300 || amount > 4000) {
     return res.status(400).json({ message: "Loan must be R300-R4000" });
   }
 
-  if (!bankDetails || !bankDetails.bankName || !bankDetails.accountNumber || !bankDetails.branchCode || !bankDetails.accountHolder) {
-    return res.status(400).json({ message: "All bank details are required" });
+  const requiredFields = ["bankName", "accountNumber", "branchCode", "accountHolder"];
+  for (const field of requiredFields) {
+    if (!bankDetails?.[field]) {
+      return res.status(400).json({ message: "All bank details are required" });
+    }
   }
 
   try {
-    // 1️⃣ Create loan
+    // Create loan
     const loan = await Loan.create({
-      user: req.user._id,
+      user: req.user.id,
       amount,
+      term: term || 12,
       bankDetails,
     });
 
-    // 2️⃣ Send emails
+    // Prepare email messages
     const adminMessage = `
 A new loan application has been submitted.
 
@@ -120,7 +120,6 @@ Bank Details:
 - Branch Code: ${bankDetails.branchCode}
 - Account Holder: ${bankDetails.accountHolder}
     `;
-
     const userMessage = `
 Dear ${req.user.name},
 
@@ -131,14 +130,17 @@ Thank you,
 MSB Finance
     `;
 
-    await sendEmail(process.env.SMTP_USER, "New Loan Application", adminMessage);
-    await sendEmail(req.user.email, "Loan Application Received", userMessage);
+    // Send emails, but don't block if they fail
+    try {
+      await sendEmail(process.env.SMTP_USER, "New Loan Application", adminMessage);
+      await sendEmail(req.user.email, "Loan Application Received", userMessage);
+    } catch (emailErr) {
+      console.error("Email failed:", emailErr);
+    }
 
-    // 3️⃣ Return the created loan
-    res.json({ success: true, loan, message: "Loan applied and notifications sent" });
-
+    res.json({ success: true, loan, message: "Loan applied successfully (emails may have failed)" });
   } catch (err) {
-    console.error(err);
+    console.error("Loan application error:", err);
     res.status(500).json({ success: false, message: "Failed to apply loan" });
   }
 });
@@ -146,29 +148,29 @@ MSB Finance
 // -----------------
 // Upload document
 // -----------------
-router.post("/upload-document", authMiddleware, multer().single("document"), async (req, res) => {
+router.post("/upload-document", authMiddleware, upload.single("document"), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
+  const key = `${Date.now()}-${uuidv4()}-${req.file.originalname}`;
   const params = {
     Bucket: BUCKET,
-    Key: `${Date.now()}-${req.file.originalname}`,
+    Key: key,
     Body: req.file.buffer,
-    ContentType: req.file.mimetype
+    ContentType: req.file.mimetype,
   };
 
   try {
-    const upload = new Upload({ client: s3, params });
-    const result = await upload.done();
+    const uploader = new Upload({ client: s3, params });
+    await uploader.done();
 
     const doc = await Document.create({
-      user: req.user._id,
-      fileName: params.Key,
-      url: `https://${BUCKET}.s3.${REGION}.amazonaws.com/${params.Key}`
+      user: req.user.id,
+      fileName: key,
     });
 
     res.json(doc);
   } catch (err) {
-    console.error(err);
+    console.error("S3 upload failed:", err);
     res.status(500).json({ message: "S3 upload failed" });
   }
 });
@@ -180,15 +182,14 @@ router.get("/documents/:id/download", authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found" });
-    if (doc.user.toString() !== req.user._id.toString()) {
+    if (doc.user.toString() !== req.user.id)
       return res.status(403).json({ message: "Unauthorized" });
-    }
 
     const command = new GetObjectCommand({ Bucket: BUCKET, Key: doc.fileName });
     const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
     res.json({ url, fileName: doc.fileName });
   } catch (err) {
-    console.error(err);
+    console.error("Failed to generate download link:", err);
     res.status(500).json({ message: "Failed to generate download link" });
   }
 });
@@ -200,16 +201,14 @@ router.delete("/documents/:id", authMiddleware, async (req, res) => {
   try {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found" });
-    if (doc.user.toString() !== req.user._id.toString()) {
+    if (doc.user.toString() !== req.user.id)
       return res.status(403).json({ message: "Unauthorized" });
-    }
 
     await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: doc.fileName }));
     await doc.deleteOne();
-
     res.json({ message: "Document deleted successfully" });
   } catch (err) {
-    console.error(err);
+    console.error("Failed to delete document:", err);
     res.status(500).json({ message: "Failed to delete document" });
   }
 });
@@ -219,10 +218,10 @@ router.delete("/documents/:id", authMiddleware, async (req, res) => {
 // -----------------
 router.get("/loans", authMiddleware, async (req, res) => {
   try {
-    const loans = await Loan.find({ user: req.user._id });
+    const loans = await Loan.find({ user: req.user.id });
     res.json(loans);
   } catch (err) {
-    console.error(err);
+    console.error("Failed to fetch loans:", err);
     res.status(500).json({ message: "Failed to fetch loans" });
   }
 });
@@ -232,14 +231,11 @@ router.get("/loans", authMiddleware, async (req, res) => {
 // -----------------
 router.get("/documents", authMiddleware, async (req, res) => {
   try {
-    const docs = await Document.find({ user: req.user._id });
+    const docs = await Document.find({ user: req.user.id });
 
     const signedDocs = await Promise.all(
       docs.map(async (d) => {
-        const command = new PutObjectCommand({
-          Bucket: BUCKET,
-          Key: d.fileName
-        });
+        const command = new GetObjectCommand({ Bucket: BUCKET, Key: d.fileName });
         const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
         return { ...d.toObject(), signedUrl: url };
       })
@@ -247,7 +243,7 @@ router.get("/documents", authMiddleware, async (req, res) => {
 
     res.json(signedDocs);
   } catch (err) {
-    console.error(err);
+    console.error("Failed to load documents:", err);
     res.status(500).json({ message: "Failed to load documents" });
   }
 });

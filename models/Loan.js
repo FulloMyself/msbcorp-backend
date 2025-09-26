@@ -1,10 +1,24 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
-const loanSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  amount: { type: Number, required: true, min: 300, max: 4000 },
-  status: { type: String, enum: ['Pending','Approved','Rejected'], default: 'Pending' },
-  createdAt: { type: Date, default: Date.now }
-});
+const loanSchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    amount: { type: Number, required: true },
+    term: { type: Number, required: true }, // months
+    interestRate: { type: Number, default: 12 },
+    status: {
+      type: String,
+      enum: ["Pending", "Approved", "Rejected", "Disbursed", "Closed"],
+      default: "Pending",
+    },
+    bankDetails: {
+      bankName: { type: String },
+      accountNumber: { type: String },
+      branchCode: { type: String },
+      accountHolder: { type: String },
+    },
+  },
+  { timestamps: true } // adds createdAt & updatedAt
+);
 
-module.exports = mongoose.model('Loan', loanSchema);
+export default mongoose.model("Loan", loanSchema);
