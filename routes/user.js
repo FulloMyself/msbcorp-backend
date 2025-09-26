@@ -49,25 +49,39 @@ router.get("/me", authMiddleware, async (req, res) => {
 });
 
 // -----------------
-// Update user details (Phone + Password)
+// Update user details (Email + Password)
 // -----------------
 router.post("/update-details", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { contact, currentPassword, newPassword } = req.body;
+    const { email, currentPassword, newPassword, confirmNewPassword } = req.body;
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (contact) user.contact = contact;
+    // ✅ Update email if provided
+    if (email) {
+      user.email = email;
+    }
 
-    if (newPassword) {
-      if (!currentPassword)
-        return res.status(400).json({ message: "Current password required" });
+    // ✅ Handle password update securely
+    if (newPassword || confirmNewPassword || currentPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({ message: "Current password is required" });
+      }
 
       const isMatch = await bcrypt.compare(currentPassword, user.password);
-      if (!isMatch)
-        return res.status(400).json({ message: "Current password incorrect" });
+      if (!isMatch) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+
+      if (!newPassword || !confirmNewPassword) {
+        return res.status(400).json({ message: "New password and confirmation are required" });
+      }
+
+      if (newPassword !== confirmNewPassword) {
+        return res.status(400).json({ message: "New password and confirmation do not match" });
+      }
 
       user.password = await bcrypt.hash(newPassword, 10);
     }
@@ -79,6 +93,7 @@ router.post("/update-details", authMiddleware, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 // -----------------
 // Apply loan

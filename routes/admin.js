@@ -22,6 +22,18 @@ const s3 = new S3Client({
   },
 });
 
+// -----------------
+// Get current user
+// -----------------
+router.get("/me", authMiddleware, async (req, res) => {
+  try {
+    res.json(req.user);
+  } catch (err) {
+    console.error("Error fetching user:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Get all users
 router.get("/users", authMiddleware, adminMiddleware, async (req, res) => {
   const users = await User.find({ role: "user" }).select("-password");
