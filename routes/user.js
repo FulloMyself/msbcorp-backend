@@ -145,13 +145,9 @@ Thank you,
 MSB Finance
     `;
 
-    // Send emails, but don't block if they fail
-    try {
-      await sendEmail(process.env.SMTP_USER, "New Loan Application", adminMessage);
-      await sendEmail(req.user.email, "Loan Application Received", userMessage);
-    } catch (emailErr) {
-      console.error("Email failed:", emailErr);
-    }
+    // Send emails non-blocking
+    sendEmail(process.env.SMTP_USER, "New Loan Application", adminMessage);
+    sendEmail(req.user.email, "Loan Application Received", userMessage);
 
     res.json({ success: true, loan, message: "Loan applied and email notifications sent successfully." });
   } catch (err) {
