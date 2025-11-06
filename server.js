@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
@@ -27,9 +28,13 @@ const allowedOrigins = [
   "http://localhost:5500",
   "http://127.0.0.1:5500",
   "http://localhost:3000",
+  "http://msbfinance.co.za",
   "https://msbfinance.co.za",
+  "http://www.msbfinance.co.za",
+  "https://www.msbfinance.co.za",
   "https://fullomyself.github.io",
-  "https://msbcorp-backend.onrender.com"
+  "https://msbcorp-backend.onrender.com",
+  "http://msbcorp-backend.onrender.com"
 ];
 
 app.use(cors({
@@ -55,14 +60,18 @@ app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/admin", adminRoutes);
 
-// ===== Serve frontend =====
+// ===== Serve frontend (only if it exists) =====
 const frontendPath = path.join(__dirname, "frontend");
-app.use(express.static(frontendPath));
+if (fs.existsSync(frontendPath)) {
+  app.use(express.static(frontendPath));
 
-// Catch-all route for frontend (exclude /api/*)
-app.get(/^\/(?!api\/).*/, (req, res) => {
-  res.sendFile(path.join(frontendPath, "index.html"));
-});
+  // Catch-all route for frontend (exclude /api/*)
+  app.get(/^\/(?!api\/).*/, (req, res) => {
+    res.sendFile(path.join(frontendPath, "index.html"));
+  });
+} else {
+  console.log('⚠️ Frontend folder not found, skipping static file serving.');
+}
 
 // ===== Error Handling Middleware =====
 app.use((err, req, res, next) => {
