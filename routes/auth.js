@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 import User from "../models/User.js";
+import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -56,3 +57,13 @@ router.post("/login", async (req, res) => {
 });
 
 export default router;
+
+// Token verification endpoint (used by frontend to check token and role)
+router.get('/verify', authMiddleware, (req, res) => {
+  try {
+    return res.json({ valid: true, role: req.user.role, user: { id: req.user.id, name: req.user.name, email: req.user.email } });
+  } catch (err) {
+    console.error('Verify error:', err);
+    return res.status(500).json({ valid: false });
+  }
+});
