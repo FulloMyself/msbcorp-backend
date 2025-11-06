@@ -25,31 +25,44 @@ const __dirname = path.dirname(__filename);
 
 // ===== CORS setup ====
 const allowedOrigins = [
-  "http://localhost:5500",
-  "http://127.0.0.1:5500",
-  "http://localhost:3000",
-  "http://msbfinance.co.za",
-  "https://msbfinance.co.za",
-  "http://www.msbfinance.co.za",
-  "https://www.msbfinance.co.za",
-  "https://fullomyself.github.io",
-  "https://msbcorp-backend.onrender.com",
-  "http://msbcorp-backend.onrender.com"
+  'http://localhost:5500',
+  'http://127.0.0.1:5500',
+  'http://localhost:3000',
+  'http://msbfinance.co.za',
+  'https://msbfinance.co.za',
+  'http://www.msbfinance.co.za',
+  'https://www.msbfinance.co.za',
+  'https://msbcorp-backend.onrender.com'
 ];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.log('Blocked origin:', origin);
-      callback(new Error("CORS not allowed for this origin"));
+  origin: (origin, callback) => {
+    // allow requests with no origin (e.g., curl, mobile apps)
+    if (!origin) return callback(null, true);
+
+    // allow exact matches
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    // allow any subdomain of msbfinance.co.za (if you want)
+    try {
+      const url = new URL(origin);
+      if (url.hostname.endsWith('.msbfinance.co.za') || url.hostname === 'msbfinance.co.za') {
+        return callback(null, true);
+      }
+    } catch (e) {
+      // invalid origin format; fall through to block
     }
+
+    console.log('Blocked origin:', origin);
+    callback(new Error('CORS not allowed for this origin'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization']
 }));
+
+// Also ensure we respond to preflight explicitly (optional - cors should do this)
+app.options('*', cors());
 
 // ===== Middleware =====
 app.use(express.json());
