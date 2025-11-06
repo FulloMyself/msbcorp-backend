@@ -1,80 +1,46 @@
-import nodemailer from "nodemailer";
+// Email configuration
+const PHP_ENDPOINT = process.env.NODE_ENV === 'production'
+  ? 'https://msbfinance.co.za/send-email.php'
+  : 'http://localhost/send-email.php';
 
 // Retry configuration
 const RETRY_COUNT = 2;
 const RETRY_DELAY = 3000; // 3 seconds
-const CONNECTION_TIMEOUT = 15000; // 15 seconds
-const SOCKET_TIMEOUT = 30000; // 30 seconds
 
 // Helper function to delay execution
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Basic email configuration with detailed logging
 const createTransporter = () => {
-  // Get configuration from environment
-  const config = {
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  };
-
-  // Log configuration check
-  console.log('📧 Checking email configuration:', {
-    host: config.host,
-    port: config.port,
-    user: config.user,
-    hasPassword: Boolean(config.pass)
-  });
-
-  // Validate required fields
-  if (!config.host || !config.port || !config.user || !config.pass) {
-    console.error('❌ Missing email configuration:', {
-      missingHost: !config.host,
-      missingPort: !config.port,
-      missingUser: !config.user,
-      missingPass: !config.pass
-    });
-    throw new Error('Missing email configuration');
-  }
-
-  // Create transporter with enhanced reliability config
-  return nodemailer.createTransport({
-    host: config.host,
-    port: Number(config.port),
-    secure: true,  // use SSL
-    auth: {
-      user: config.user,
-      pass: config.pass
-    },
-    connectionTimeout: CONNECTION_TIMEOUT,
-    socketTimeout: SOCKET_TIMEOUT,
-    pool: true, // Use connection pooling
-    maxConnections: 5,
-    maxMessages: 100,
-    rateDelta: 1000, // 1 second
-    rateLimit: 5, // 5 messages per rateDelta
-    tls: {
-      rejectUnauthorized: false // allow self-signed certs
-    }
-  });
+  console.log('📧 Using PHP mailer endpoint:', PHP_ENDPOINT);
+  return true;
 };
 
 // Test the email configuration directly
 export const testEmailConfig = async () => {
   try {
-    const transporter = createTransporter();
-    console.log('🔄 Testing SMTP connection...');
-    await transporter.verify();
-    console.log('✅ SMTP connection test successful');
+    console.log('🔄 Testing PHP mailer endpoint...');
+    const response = await fetch(PHP_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: 'test@msbfinance.co.za',
+        subject: 'Test Email',
+        message: 'This is a test email.'
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    console.log('✅ PHP mailer test successful');
     return true;
   } catch (err) {
-    console.error('❌ SMTP connection test failed:', {
-      error: err.message,
-      code: err.code,
-      command: err.command,
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT
+    console.error('❌ PHP mailer test failed:', {
+      error: err.message
     });
     return false;
   }
@@ -88,35 +54,33 @@ export const sendEmail = async (to, subject, text) => {
     try {
       console.log(`📧 Preparing to send email (attempt ${attempt}/${RETRY_COUNT}):`, { to, subject });
       
-      // Create transporter (pooled connections will be reused)
-      const transporter = createTransporter();
-      
-      // Prepare mail options
-      const mailOptions = {
-        from: {
-          name: 'MSB Finance',
-          address: process.env.SMTP_USER
+      // Send request to PHP endpoint
+      const response = await fetch(PHP_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        to,
-        subject,
-        text,
-        priority: 'high'
-      };
-
-      // Attempt to send with timeout promise
-      const info = await Promise.race([
-        transporter.sendMail(mailOptions),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Operation timed out')), SOCKET_TIMEOUT)
-        )
-      ]);
+        body: JSON.stringify({
+          to,
+          subject,
+          message: text
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to send email');
+      }
 
       // Log success
       console.log('✅ Email sent successfully:', {
         to,
         subject,
-        messageId: info.messageId,
-        response: info.response,
         attempt
       });
 
@@ -139,12 +103,8 @@ export const sendEmail = async (to, subject, text) => {
   // Log detailed final error
   console.error('❌ Email sending failed after all retries:', {
     error: lastError.message,
-    code: lastError.code,
-    command: lastError.command,
     to,
-    subject,
-    smtpHost: process.env.SMTP_HOST,
-    smtpPort: process.env.SMTP_PORT
+    subject
   });
 
   // Re-throw last error for caller to handle
