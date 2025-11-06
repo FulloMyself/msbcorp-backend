@@ -28,16 +28,22 @@ const allowedOrigins = [
   "http://127.0.0.1:5500",
   "http://localhost:3000",
   "https://msbfinance.co.za",
-  "https://fullomyself.github.io"
+  "https://fullomyself.github.io",
+  "https://msbcorp-backend.onrender.com"
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Postman/curl
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error("CORS not allowed for this origin"));
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('Blocked origin:', origin);
+      callback(new Error("CORS not allowed for this origin"));
+    }
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // ===== Middleware =====
