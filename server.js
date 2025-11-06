@@ -61,8 +61,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type','Authorization']
 }));
 
-// Also ensure we respond to preflight explicitly (optional - cors should do this)
-app.options('*', cors());
+// Note: cors middleware already handles preflight responses; avoid app.options('*', cors())
+// because certain path patterns (like '*') can break path-to-regexp in some environments.
 
 // ===== Middleware =====
 app.use(express.json());
