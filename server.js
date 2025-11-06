@@ -14,6 +14,7 @@ import User from "./models/User.js";
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/user.js";
 import adminRoutes from "./routes/admin.js";
+import testRoutes from "./routes/test.js";
 
 dotenv.config();
 
@@ -72,6 +73,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/test", testRoutes);
 
 // ===== Serve frontend (only if it exists) =====
 const frontendPath = path.join(__dirname, "frontend");

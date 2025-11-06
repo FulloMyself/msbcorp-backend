@@ -145,9 +145,32 @@ Thank you,
 MSB Finance
     `;
 
-    // Send emails non-blocking
-    sendEmail(process.env.SMTP_USER, "New Loan Application", adminMessage);
-    sendEmail(req.user.email, "Loan Application Received", userMessage);
+    // Send emails with proper error handling
+    try {
+      // Send admin notification first
+      await sendEmail(
+        process.env.SMTP_USER,
+        "New Loan Application",
+        adminMessage
+      );
+      console.log('✅ Admin notification sent successfully');
+
+      // Send user confirmation
+      await sendEmail(
+        req.user.email,
+        "Loan Application Received",
+        userMessage
+      );
+      console.log('✅ User confirmation sent successfully');
+    } catch (emailErr) {
+      console.error('⚠️ Email sending failed:', emailErr);
+      // Don't fail the request, but let the client know about email status
+      return res.json({
+        success: true,
+        loan,
+        message: "Loan application submitted successfully, but confirmation email could not be sent. Our team will contact you shortly."
+      });
+    }
 
     res.json({ success: true, loan, message: "Loan applied and email notifications sent successfully." });
   } catch (err) {
